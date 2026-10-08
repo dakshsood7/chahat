@@ -1,2 +1,2 @@
 # chahat
-Person Ai 
+Personal Ai 
