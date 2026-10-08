@@ -2,27 +2,58 @@
 
 import { useState } from "react";
 
+type Message = {
+  role: "You" | "Chahat";
+  text: string;
+};
+
 export default function Home() {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<
-    { role: "You" | "Chahat"; text: string }[]
-  >([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  function sendMessage() {
+  async function sendMessage() {
     const value = message.trim();
 
-    if (!value) return;
+    if (!value || loading) return;
 
     setMessages((current) => [
       ...current,
       { role: "You", text: value },
-      {
-        role: "Chahat",
-        text: "I'm Chahat. My AI brain is being connected.",
-      },
     ]);
 
     setMessage("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: value }),
+      });
+
+      const data = await response.json();
+
+      setMessages((current) => [
+        ...current,
+        {
+          role: "Chahat",
+          text: data.reply || "Something went wrong.",
+        },
+      ]);
+    } catch {
+      setMessages((current) => [
+        ...current,
+        {
+          role: "Chahat",
+          text: "I couldn't connect to my backend.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -59,6 +90,12 @@ export default function Home() {
                   <p className="mt-1">{item.text}</p>
                 </div>
               ))}
+
+              {loading && (
+                <p className="text-sm text-zinc-500">
+                  Chahat is thinking...
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -76,12 +113,13 @@ export default function Home() {
 
           <button
             onClick={sendMessage}
-            className="rounded-xl bg-white px-6 font-semibold text-black"
+            disabled={loading}
+            className="rounded-xl bg-white px-6 font-semibold text-black disabled:opacity-50"
           >
-            Send
+            {loading ? "..." : "Send"}
           </button>
         </div>
       </section>
     </main>
   );
-}
+}        
