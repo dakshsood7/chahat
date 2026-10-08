@@ -1,2 +1,2 @@
-# chahat
+# chahat-ai
 Personal Ai 
