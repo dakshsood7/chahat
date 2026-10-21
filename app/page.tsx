@@ -1,133 +1,176 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState
+} from "react";
 
 type Message = {
-  role: "You" | "Chahat";
-  text: string;
+  id: string;
+  role: "user" | "assistant";
+  content: string;
 };
 
+const suggestions = [
+  "Introduce yourself",
+  "Help me plan my day",
+  "Teach me something new",
+  "Explain a difficult topic in Hindi"
+];
+
 export default function Home() {
-  const [message, setMessage] = useState("");
+  const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end"
+    });
   }, [messages, loading]);
 
-  async function sendMessage() {
-    const value = message.trim();
+  async function sendMessage(
+    event?: FormEvent<HTMLFormElement>,
+    suggestedMessage?: string
+  ) {
+    event?.preventDefault();
 
-    if (!value || loading) return;
+    const text = (suggestedMessage ?? input).trim();
 
-    setMessages((current) => [
-      ...current,
-      { role: "You", text: value },
-    ]);
+    if (!text || loading) return;
 
-    setMessage("");
-    setLoading(true);
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text
+    };
+
+    const nextMessages = [...messages, userMessage];
+
+    setMessages(nextMessages);
+    setInput("");
     setError("");
+    setLoading(true);
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify({ message: value }),
+        body: JSON.stringify({
+          messages: nextMessages.map((message) => ({
+            role: message.role,
+            content: message.content
+          }))
+        })
       });
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
-          data.error || `Request failed (${response.status})`
+          typeof data.error === "string"
+            ? data.error
+            : `Request failed (${response.status})`
         );
+      }
+
+      if (typeof data.reply !== "string" || !data.reply.trim()) {
+        throw new Error("Chahat returned an empty response.");
       }
 
       setMessages((current) => [
         ...current,
         {
-          role: "Chahat",
-          text: data.reply || "I couldn't generate a response. Try again.",
-        },
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.reply
+        }
       ]);
     } catch (err) {
-      const reason =
+      setError(
         err instanceof Error
           ? err.message
-          : "Unknown connection error.";
-
-      setError(reason);
-
-      setMessages((current) => [
-        ...current,
-        {
-          role: "Chahat",
-          text: "I couldn't complete your request. Check the error below and try again.",
-        },
-      ]);
+          : "Connection failed. Please try again."
+      );
     } finally {
       setLoading(false);
+      inputRef.current?.focus();
     }
   }
 
   return (
-    <main className="min-h-screen bg-[#08080c] text-white flex items-center justify-center p-4 sm:p-6">
-      <section className="w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-[#101016] shadow-2xl">
-        <header className="border-b border-white/10 p-6 sm:p-8">
-          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-2xl font-bold shadow-lg">
-            C
+    <main className="min-h-screen bg-midnight px-3 py-4 text-white sm:px-6 sm:py-8">
+      <section className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-panel shadow-2xl sm:min-h-[calc(100dvh-4rem)]">
+        <header className="flex items-center justify-between border-b border-white/10 px-5 py-4 sm:px-7">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-xl font-bold shadow-lg shadow-violet-950/40">
+              C
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">
+                Chahat<span className="text-violet-400"> AI</span>
+              </h1>
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                Personal assistant
+              </div>
+            </div>
           </div>
 
-          <p className="text-xs font-medium tracking-[0.3em] text-violet-300">
-            PERSONAL AI ASSISTANT
-          </p>
-
-          <h1 className="mt-3 text-5xl font-bold tracking-tight sm:text-6xl">
-            Chahat<span className="text-violet-400">.</span>
-          </h1>
-
-          <p className="mt-3 text-sm text-zinc-400">
-            Your ideas. Your assistant. One conversation.
-          </p>
-
-          <div className="mt-5 flex items-center gap-2 text-xs text-zinc-400">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            Assistant interface ready
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (loading) return;
+              setMessages([]);
+              setError("");
+              setInput("");
+            }}
+            disabled={loading || messages.length === 0}
+            className="rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-300 transition hover:bg-white/5 disabled:opacity-40"
+          >
+            New chat
+          </button>
         </header>
 
-        <div className="flex min-h-[320px] max-h-[55vh] flex-col gap-5 overflow-y-auto p-5 sm:p-7">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 py-6 sm:px-7">
           {messages.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-violet-400/20 bg-violet-500/10 text-2xl">
+            <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-violet-400/20 bg-violet-500/10 text-4xl text-violet-300">
                 ✦
               </div>
 
-              <h2 className="text-xl font-semibold">
-                Welcome to Chahat
-              </h2>
-
-              <p className="mt-2 max-w-sm text-sm text-zinc-500">
-                Start a conversation, ask a question, or work through an idea.
+              <p className="text-xs font-medium tracking-[0.3em] text-violet-300">
+                YOUR PERSONAL AI
               </p>
 
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
-                {[
-                  "Introduce yourself",
-                  "Help me plan my day",
-                  "Teach me something new",
-                ].map((suggestion) => (
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-5xl">
+                What&apos;s on your mind?
+              </h2>
+
+              <p className="mt-4 max-w-md text-sm leading-6 text-zinc-400">
+                Ask questions, explore ideas, learn new skills,
+                or plan your next move with Chahat.
+              </p>
+
+              <div className="mt-8 grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
+                {suggestions.map((suggestion) => (
                   <button
                     key={suggestion}
-                    onClick={() => setMessage(suggestion)}
-                    className="rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-violet-400/50 hover:bg-violet-500/10"
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      void sendMessage(undefined, suggestion);
+                    }}
+                    className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-left text-sm text-zinc-300 transition hover:border-violet-400/40 hover:bg-violet-500/[0.06] disabled:opacity-50"
                   >
                     {suggestion}
                   </button>
@@ -135,72 +178,81 @@ export default function Home() {
               </div>
             </div>
           ) : (
-            messages.map((item, index) => (
-              <div
-                key={`${index}-${item.role}`}
-                className={`flex flex-col ${
-                  item.role === "You" ? "items-end" : "items-start"
-                }`}
-              >
-                <span className="mb-2 text-xs text-zinc-500">
-                  {item.role}
-                </span>
-
-                <div
-                  className={`max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[80%] ${
-                    item.role === "You"
-                      ? "rounded-br-sm bg-violet-600 text-white"
-                      : "rounded-bl-sm border border-white/10 bg-[#1a1a24] text-zinc-200"
+            <>
+              {messages.map((message) => (
+                <article
+                  key={message.id}
+                  className={`flex flex-col ${
+                    message.role === "user"
+                      ? "items-end"
+                      : "items-start"
                   }`}
                 >
-                  {item.text}
-                </div>
-              </div>
-            ))
-          )}
+                  <span className="mb-2 px-1 text-xs text-zinc-500">
+                    {message.role === "user" ? "You" : "Chahat"}
+                  </span>
 
-          {loading && (
-            <div className="text-sm text-violet-300 animate-pulse">
-              Chahat is thinking...
-            </div>
+                  <div
+                    className={`max-w-[92%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-7 sm:max-w-[82%] ${
+                      message.role === "user"
+                        ? "rounded-br-sm bg-violet-600 text-white"
+                        : "rounded-bl-sm border border-white/10 bg-[#191923] text-zinc-200"
+                    }`}
+                  >
+                    {message.content}
+                  </div>
+                </article>
+              ))}
+
+              {loading && (
+                <div className="flex items-center gap-3 self-start rounded-2xl border border-white/10 bg-[#191923] px-4 py-3 text-sm text-violet-300">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-violet-400" />
+                  Chahat is thinking...
+                </div>
+              )}
+            </>
           )}
 
           <div ref={bottomRef} />
         </div>
 
         {error && (
-          <div className="mx-5 mb-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300 sm:mx-7">
-            Error: {error}
+          <div
+            role="alert"
+            className="mx-4 mb-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300 sm:mx-7"
+          >
+            {error}
           </div>
         )}
 
         <form
+          onSubmit={(event) => void sendMessage(event)}
           className="border-t border-white/10 p-4 sm:p-6"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void sendMessage();
-          }}
         >
-          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#08080c] p-2 focus-within:border-violet-400/50">
+          <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#08080c] p-2 transition focus-within:border-violet-400/50">
             <input
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
+              ref={inputRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
               placeholder="Message Chahat..."
               aria-label="Message Chahat"
-              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-zinc-600"
+              autoComplete="off"
+              maxLength={8000}
+              disabled={loading}
+              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm outline-none placeholder:text-zinc-600 disabled:opacity-60"
             />
 
             <button
               type="submit"
-              disabled={loading || !message.trim()}
-              className="rounded-xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={loading || !input.trim()}
+              className="rounded-xl bg-violet-500 px-5 py-3 text-sm font-semibold transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {loading ? "..." : "Send"}
             </button>
           </div>
 
           <p className="mt-3 text-center text-xs text-zinc-600">
-            Chahat AI · Responses may occasionally be inaccurate.
+            Chahat AI can make mistakes. Verify important information.
           </p>
         </form>
       </section>
